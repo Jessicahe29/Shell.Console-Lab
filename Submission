@@ -1,0 +1,460 @@
+Last login: Tue Jun 22 11:08:26 on ttys000
+jess@zipcodes-MacBook-Pro-3 ~ % mkdir ~/Dev
+jess@zipcodes-MacBook-Pro-3 ~ % pwd
+/Users/jess
+jess@zipcodes-MacBook-Pro-3 ~ % ls
+Applications	Documents	Music		howdt.txt
+DayOneDemo	Downloads	Pictures
+Desktop		Library		Public
+Dev		Movies		greetings
+jess@zipcodes-MacBook-Pro-3 ~ % cd ~
+jess@zipcodes-MacBook-Pro-3 ~ % pwd
+/Users/jess
+jess@zipcodes-MacBook-Pro-3 ~ % cd Dev
+^C
+jess@zipcodes-MacBook-Pro-3 Dev % echo "Hello Terminal" >myFile.txt
+jess@zipcodes-MacBook-Pro-3 Dev % ls
+myFile.txt
+jess@zipcodes-MacBook-Pro-3 Dev % cat
+^C
+jess@zipcodes-MacBook-Pro-3 Dev % cat myFile.txt
+Hello Terminal
+jess@zipcodes-MacBook-Pro-3 Dev % cat /etc/bashrc_Apple_Terminal
+# bash support for Terminal.
+
+
+# Working Directory
+#
+# Tell the terminal about the current working directory at each prompt.
+
+if [ -z "$INSIDE_EMACS" ]; then
+    update_terminal_cwd() {
+	# Identify the directory using a "file:" scheme URL, including
+	# the host name to disambiguate local vs. remote paths.
+	
+	# Percent-encode the pathname.
+	local url_path=''
+	{
+	    # Use LC_CTYPE=C to process text byte-by-byte. Ensure that
+	    # LC_ALL isn't set, so it doesn't interfere.
+	    local i ch hexch LC_CTYPE=C LC_ALL=
+	    for ((i = 0; i < ${#PWD}; ++i)); do
+		ch="${PWD:i:1}"
+		if [[ "$ch" =~ [/._~A-Za-z0-9-] ]]; then
+		    url_path+="$ch"
+		else
+		    printf -v hexch "%02X" "'$ch"
+		    # printf treats values greater than 127 as
+		    # negative and pads with "FF", so truncate.
+		    url_path+="%${hexch: -2:2}"
+		fi
+	    done
+	}
+	
+	printf '\e]7;%s\a' "file://$HOSTNAME$url_path"
+    }
+    PROMPT_COMMAND="update_terminal_cwd${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+fi
+
+
+# Resume Support: Save/Restore Shell State
+#
+# Terminal assigns each terminal session a unique identifier and
+# communicates it via the TERM_SESSION_ID environment variable so that
+# programs running in a terminal can save/restore application-specific
+# state when quitting and restarting Terminal with Resume enabled.
+#
+# The following code defines a shell save/restore mechanism. Users can
+# add custom state by defining a shell_session_save_user_state function
+# that writes restoration commands to the session file at exit. e.g.,
+# to save a variable:
+#
+#   shell_session_save_user_state() { echo MY_VAR="'$MY_VAR'" >> "$SHELL_SESSION_FILE"; }
+#
+# During shell startup the session file is executed. Old files are
+# periodically deleted.
+#
+# The default behavior arranges to save and restore the bash command
+# history independently for each restored terminal session. It also
+# merges commands into the global history for new sessions. Because
+# of this it is recommended that you set HISTSIZE and HISTFILESIZE to
+# larger values.
+#
+# You may disable this behavior and share a single history by setting
+# SHELL_SESSION_HISTORY to 0. There are some common user customizations
+# that arrange to share new commands among running shells by
+# manipulating the history at each prompt, and they typically include
+# 'shopt -s histappend'; therefore, if the histappend shell option is
+# enabled, per-session history is disabled by default. You may
+# explicitly enable it by setting SHELL_SESSION_HISTORY to 1.
+#
+# The implementation of per-session command histories in combination
+# with a shared global command history is incompatible with the
+# HISTTIMEFORMAT variable--the timestamps are applied inconsistently
+# to different parts of the history; therefore, if HISTTIMEFORMAT is
+# defined, per-session history is disabled by default.
+#
+# Note that this uses PROMPT_COMMAND to enable per-session history
+# the first time for each new session. If you customize PROMPT_COMMAND
+# be sure to include the previous value. e.g.,
+#
+#   PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND; }your_code_here"
+#
+# Otherwise, the per-session history won't take effect until the first
+# restore.
+#
+# The save/restore mechanism is disabled if the following file exists:
+#
+#   ~/.bash_sessions_disable
+
+if [ ${SHELL_SESSION_DID_INIT:-0} -eq 0 ] && [ -n "$TERM_SESSION_ID" ] && [ ! -e "$HOME/.bash_sessions_disable" ]; then
+    
+    # Do not perform this setup more than once (which shouldn't occur
+    # unless the user's ~/.bash_profile executes /etc/profile, which
+    # is normally redundant).
+    SHELL_SESSION_DID_INIT=1
+    
+    # Set up the session directory/file.
+    SHELL_SESSION_DIR="$HOME/.bash_sessions"
+    SHELL_SESSION_FILE="$SHELL_SESSION_DIR/$TERM_SESSION_ID.session"
+    mkdir -m 700 -p "$SHELL_SESSION_DIR"
+    
+    #
+    # Restore previous session state.
+    #
+    
+    if [ -r "$SHELL_SESSION_FILE" ]; then
+	. "$SHELL_SESSION_FILE"
+	rm "$SHELL_SESSION_FILE"
+    fi
+    
+    #
+    # Note: Use absolute paths to invoke commands in the exit code and
+    # anything else that runs after user startup files, because the
+    # search path may have been modified.
+    #
+    
+    #
+    # Arrange for per-session shell command history.
+    #
+    
+    shell_session_history_allowed() {
+	# Return whether per-session history should be enabled.
+	if [ -n "$HISTFILE" ]; then
+	    # If this defaults to off, leave it unset so that we can
+	    # check again later. If it defaults to on, make it stick.
+	    local allowed=0
+	    if shopt -q histappend || [ -n "$HISTTIMEFORMAT" ]; then
+		allowed=${SHELL_SESSION_HISTORY:-0}
+	    else
+		allowed=${SHELL_SESSION_HISTORY:=1}
+	    fi
+	    if [ $allowed -eq 1 ]; then
+		return 0
+	    fi
+	fi
+	return 1
+    }
+    
+    if [ ${SHELL_SESSION_HISTORY:-1} -eq 1 ]; then
+	SHELL_SESSION_HISTFILE="$SHELL_SESSION_DIR/$TERM_SESSION_ID.history"
+	SHELL_SESSION_HISTFILE_NEW="$SHELL_SESSION_DIR/$TERM_SESSION_ID.historynew"
+	SHELL_SESSION_HISTFILE_SHARED="$HISTFILE"
+	
+	shell_session_history_enable() {
+	    (umask 077; /usr/bin/touch "$SHELL_SESSION_HISTFILE_NEW")
+	    HISTFILE="$SHELL_SESSION_HISTFILE_NEW"
+	    SHELL_SESSION_HISTORY=1
+	}
+	
+	# If the session history already exists and isn't empty, start
+	# using it now; otherwise, we'll use the shared history until
+	# we've determined whether users have enabled/disabled this.
+	if [ -s "$SHELL_SESSION_HISTFILE" ]; then
+	    history -r "$SHELL_SESSION_HISTFILE"
+	    shell_session_history_enable
+	else
+	    # At the first prompt, check whether per-session history should
+	    # be enabled. Delaying until after user scripts have run allows
+	    # users to opt in or out. If this doesn't get executed (because
+	    # the user has replaced PROMPT_COMMAND instead of concatenating
+	    # it), we'll check at shell exit; that works, but doesn't start
+	    # the per-session history until the first restore.
+	    
+	    shell_session_history_check() {
+		if [ ${SHELL_SESSION_DID_HISTORY_CHECK:-0} -eq 0 ]; then
+		    SHELL_SESSION_DID_HISTORY_CHECK=1
+		    if shell_session_history_allowed; then
+			shell_session_history_enable
+		    fi
+		    # Remove this check if we can; otherwise, we rely on the
+		    # variable above to prevent checking more than once.
+		    if [ "$PROMPT_COMMAND" = "shell_session_history_check" ]; then
+			unset PROMPT_COMMAND
+		    elif [[ $PROMPT_COMMAND =~ (.*)(; *shell_session_history_check *| *shell_session_history_check *; *)(.*) ]]; then
+			PROMPT_COMMAND="${BASH_REMATCH[1]}${BASH_REMATCH[3]}"
+		    fi
+		fi
+	    }
+	    PROMPT_COMMAND="shell_session_history_check${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+	fi
+	
+	shell_session_save_history() {
+	    # Save new history to an intermediate file so we can copy it.
+	    shell_session_history_enable
+	    history -a
+	    # If the session history doesn't exist yet, copy the shared history.
+	    if [ -f "$SHELL_SESSION_HISTFILE_SHARED" ] && [ ! -s "$SHELL_SESSION_HISTFILE" ]; then
+		echo -ne '\n...copying shared history...'
+		(umask 077; /bin/cp "$SHELL_SESSION_HISTFILE_SHARED" "$SHELL_SESSION_HISTFILE")
+	    fi
+	    # Save new history to the per-session and shared files.
+	    echo -ne '\n...saving history...'
+	    (umask 077; /bin/cat "$SHELL_SESSION_HISTFILE_NEW" >> "$SHELL_SESSION_HISTFILE_SHARED")
+	    (umask 077; /bin/cat "$SHELL_SESSION_HISTFILE_NEW" >> "$SHELL_SESSION_HISTFILE")
+	    : >| "$SHELL_SESSION_HISTFILE_NEW"
+	    # If there is a history file size limit, apply it to the files.
+	    if [ -n "$HISTFILESIZE" ]; then
+		echo -n 'truncating history files...'
+		HISTFILE="$SHELL_SESSION_HISTFILE_SHARED"
+		HISTFILESIZE="$HISTFILESIZE"
+		HISTFILE="$SHELL_SESSION_HISTFILE"
+		HISTFILESIZE="$size"
+		HISTFILE="$SHELL_SESSION_HISTFILE_NEW"
+	    fi
+	    echo -ne '\n...'
+	}
+    fi
+    
+    #
+    # Arrange to save session state when exiting the shell.
+    #
+    
+    shell_session_save() {
+	# Save the current state.
+	if [ -n "$SHELL_SESSION_FILE" ]; then
+	    echo -n 'Saving session...'
+	    (umask 077; echo 'echo Restored session: "$(/bin/date -r '$(/bin/date +%s)')"' >| "$SHELL_SESSION_FILE")
+	    declare -F shell_session_save_user_state >/dev/null && shell_session_save_user_state
+	    shell_session_history_allowed && shell_session_save_history
+	    echo 'completed.'
+	fi
+    }
+    
+    # Delete old session files. (Not more than once a day.)
+    SHELL_SESSION_TIMESTAMP_FILE="$SHELL_SESSION_DIR/_expiration_check_timestamp"
+    shell_session_delete_expired() {
+	if ([ ! -e "$SHELL_SESSION_TIMESTAMP_FILE" ] || [ -z "$(/usr/bin/find "$SHELL_SESSION_TIMESTAMP_FILE" -mtime -1d)" ]); then
+	    local expiration_lock_file="$SHELL_SESSION_DIR/_expiration_lockfile"
+	    if /usr/bin/shlock -f "$expiration_lock_file" -p $$; then
+		echo -n 'Deleting expired sessions...'
+		local delete_count=$(/usr/bin/find "$SHELL_SESSION_DIR" -type f -mtime +2w -print -delete | /usr/bin/wc -l)
+		[ "$delete_count" -gt 0 ] && echo $delete_count' completed.' || echo 'none found.'
+		(umask 077; /usr/bin/touch "$SHELL_SESSION_TIMESTAMP_FILE")
+		/bin/rm "$expiration_lock_file"
+	    fi
+	fi
+    }
+    
+    # Update saved session state when exiting.
+    shell_session_update() {
+	shell_session_save && shell_session_delete_expired
+    }
+    trap shell_session_update EXIT
+fi
+jess@zipcodes-MacBook-Pro-3 Dev % grep Hello myFile.txt
+Hello Terminal
+jess@zipcodes-MacBook-Pro-3 Dev % touch
+usage:
+touch [-A [-][[hh]mm]SS] [-acfhm] [-r file] [-t [[CC]YY]MMDDhhmm[.SS]] file ...
+jess@zipcodes-MacBook-Pro-3 Dev % ls -lT
+total 8
+-rw-r--r--  1 jess  staff  15 Jun 22 19:47:00 2021 myFile.txt
+jess@zipcodes-MacBook-Pro-3 Dev % touch myfile1    
+jess@zipcodes-MacBook-Pro-3 Dev % touch myfile2
+jess@zipcodes-MacBook-Pro-3 Dev % ls -lT
+total 8
+-rw-r--r--  1 jess  staff  15 Jun 22 19:47:00 2021 myFile.txt
+-rw-r--r--  1 jess  staff   0 Jun 22 19:56:54 2021 myfile1
+-rw-r--r--  1 jess  staff   0 Jun 22 19:57:00 2021 myfile2
+jess@zipcodes-MacBook-Pro-3 Dev % vim
+jess@zipcodes-MacBook-Pro-3 Dev % vim myfile6
+jess@zipcodes-MacBook-Pro-3 Dev % vim myfile6
+jess@zipcodes-MacBook-Pro-3 Dev % 10 A
+zsh: command not found: 10
+jess@zipcodes-MacBook-Pro-3 Dev % :set number
+zsh: command not found: :set
+jess@zipcodes-MacBook-Pro-3 Dev % vim :set number
+2 files to edit
+jess@zipcodes-MacBook-Pro-3 Dev % mkdir
+usage: mkdir [-pv] [-m mode] directory ...
+jess@zipcodes-MacBook-Pro-3 Dev % mkdir Jessica
+jess@zipcodes-MacBook-Pro-3 Dev % mkdir dir1           
+jess@zipcodes-MacBook-Pro-3 Dev % mkdir dir2
+jess@zipcodes-MacBook-Pro-3 Dev % ls
+:set		dir1		myFile.txt	myfile2
+Jessica		dir2		myfile1		myfile6
+jess@zipcodes-MacBook-Pro-3 Dev % cd dir2 
+jess@zipcodes-MacBook-Pro-3 dir2 % cp
+usage: cp [-R [-H | -L | -P]] [-fi | -n] [-apvXc] source_file target_file
+       cp [-R [-H | -L | -P]] [-fi | -n] [-apvXc] source_file ... target_directory
+jess@zipcodes-MacBook-Pro-3 dir2 % mv
+usage: mv [-f | -i | -n] [-v] source target
+       mv [-f | -i | -n] [-v] source ... directory
+jess@zipcodes-MacBook-Pro-3 dir2 % vim .myFile1 
+jess@zipcodes-MacBook-Pro-3 dir2 % ls
+jess@zipcodes-MacBook-Pro-3 dir2 % cd..
+zsh: command not found: cd..
+jess@zipcodes-MacBook-Pro-3 dir2 % cd ..
+jess@zipcodes-MacBook-Pro-3 Dev % man
+What manual page do you want?
+jess@zipcodes-MacBook-Pro-3 Dev % ls
+:set		dir1		myFile.txt	myfile2
+Jessica		dir2		myfile1		myfile6
+jess@zipcodes-MacBook-Pro-3 Dev % cp
+usage: cp [-R [-H | -L | -P]] [-fi | -n] [-apvXc] source_file target_file
+       cp [-R [-H | -L | -P]] [-fi | -n] [-apvXc] source_file ... target_directory
+jess@zipcodes-MacBook-Pro-3 Dev % mv
+usage: mv [-f | -i | -n] [-v] source target
+       mv [-f | -i | -n] [-v] source ... directory
+jess@zipcodes-MacBook-Pro-3 Dev % rm
+usage: rm [-f | -i] [-dPRrvW] file ...
+       unlink file
+jess@zipcodes-MacBook-Pro-3 Dev % rm dir2   
+rm: dir2: is a directory
+jess@zipcodes-MacBook-Pro-3 Dev % rm myfile1
+jess@zipcodes-MacBook-Pro-3 Dev % rm -i
+usage: rm [-f | -i] [-dPRrvW] file ...
+       unlink file
+jess@zipcodes-MacBook-Pro-3 Dev % rmdir
+usage: rmdir [-p] directory ...
+jess@zipcodes-MacBook-Pro-3 Dev % rm -R
+usage: rm [-f | -i] [-dPRrvW] file ...
+       unlink file
+jess@zipcodes-MacBook-Pro-3 Dev % echo "Hello" >-toughFile
+jess@zipcodes-MacBook-Pro-3 Dev % rm -R
+usage: rm [-f | -i] [-dPRrvW] file ...
+       unlink file
+jess@zipcodes-MacBook-Pro-3 Dev % find / -name core
+find: /usr/sbin/authserver: Permission denied
+find: /usr/local/mysql-8.0.21-macos10.15-x86_64/keyring: Permission denied
+find: /usr/local/mysql-8.0.21-macos10.15-x86_64/data: Permission denied
+find: /Library/Application Support/Apple/Screen Sharing/Keys: Permission denied
+find: /Library/Application Support/Apple/ParentalControls/Users: Permission denied
+find: /Library/Application Support/Apple/AssetCache/Data: Permission denied
+find: /Library/Application Support/Apple/Remote Desktop/Task Server: Permission denied
+find: /Library/Application Support/Apple/Remote Desktop/Client: Permission denied
+find: /Library/Application Support/ApplePushService: Permission denied
+/Library/Application Support/Adobe/Reader/DC/WebResources/Resource0/static/css/core
+/Library/Application Support/Adobe/Reader/DC/WebResources/Resource0/static/js/core
+find: /Library/Application Support/com.apple.TCC: Operation not permitted
+/Library/Developer/CommandLineTools/SDKs/MacOSX11.0.sdk/System/Library/Frameworks/Python.framework/Versions/2.7/Extras/lib/python/numpy/core
+/Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Python.framework/Versions/2.7/Extras/lib/python/numpy/core
+/Library/Python/3.8/site-packages/numpy/core
+/Library/Python/3.8/site-packages/django/core
+/Library/Python/3.8/site-packages/pandas/core
+find: /Library/Caches/com.apple.iconservices.store: Permission denied
+find: /System/Library/DirectoryServices/DefaultLocalDB/Default: Permission denied
+find: /System/Library/Templates/Data/Library/Application Support/Apple/ParentalControls/Users: Permission denied
+find: /System/Library/Templates/Data/Library/Application Support/com.apple.TCC: Operation not permitted
+find: /System/Library/Templates/Data/private/etc/cups/certs: Permission denied
+find: /System/Library/Templates/Data/private/var/install: Permission denied
+find: /System/Library/Templates/Data/private/var/ma: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/mqueue: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/saved: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/trace: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/defer: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/flush: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/deferred: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/corrupt: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/public: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/private: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/incoming: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/active: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/maildrop: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/hold: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/postfix/bounce: Permission denied
+find: /System/Library/Templates/Data/private/var/spool/cups: Permission denied
+find: /System/Library/Templates/Data/private/var/jabberd: Permission denied
+find: /System/Library/Templates/Data/private/var/audit: Permission denied
+find: /System/Library/Templates/Data/private/var/root: Permission denied
+find: /System/Library/Templates/Data/private/var/lib/postfix: Permission denied
+find: /System/Library/Templates/Data/private/var/db/locationd: Permission denied
+find: /System/Library/Templates/Data/private/var/db/analyticsd: Permission denied
+find: /System/Library/Templates/Data/private/var/db/nsurlsessiond: Permission denied
+find: /System/Library/Templates/Data/private/var/db/fpsd: Permission denied
+find: /System/Library/Templates/Data/private/var/db/hidd: Permission denied
+find: /System/Library/Templates/Data/private/var/db/geod: Permission denied
+find: /System/Library/Templates/Data/private/var/db/reportmemoryexception: Permission denied
+find: /System/Library/Templates/Data/private/var/db/lockdown: Permission denied
+find: /System/Library/Templates/Data/private/var/db/diagnostics: Permission denied
+find: /System/Library/Templates/Data/private/var/db/datadetectors: Permission denied
+find: /System/Library/Templates/Data/private/var/db/cmiodalassistants: Permission denied
+find: /System/Library/Templates/Data/private/var/db/com.apple.xpc.roleaccountd.staging: Permission denied
+find: /System/Library/Templates/Data/private/var/db/dslocal/nodes/Default: Permission denied
+find: /System/Library/Templates/Data/private/var/db/nearbyd: Permission denied
+find: /System/Library/Templates/Data/private/var/db/timed: Permission denied
+find: /System/Library/Templates/Data/private/var/db/applepay: Permission denied
+find: /System/Library/Templates/Data/private/var/db/securityagent: Permission denied
+find: /System/Library/Templates/Data/private/var/db/ConfigurationProfiles/Store: Permission denied
+find: /System/Library/Templates/Data/private/var/db/caches/opendirectory: Permission denied
+find: /System/Library/Templates/Data/private/var/at/tabs: Permission denied
+find: /System/Library/Templates/Data/private/var/at/tmp: Permission denied
+find: /System/Library/Templates/Data/private/var/backups: Permission denied
+find: /System/Library/Templates/Data/private/var/agentx: Permission denied
+//System/Library/Frameworks/Python.framework/Versions/2.7/Extras/lib/python/numpy/core
+dev/find: /System/Library/Caches/com.apple.appstored: Permission denied
+find: /System/Library/Caches/com.apple.coresymbolicationd: Permission denied
+find: /System/Volumes/Data/home: Operation not permitted
+find: /System/Volumes/Data/usr/local/mysql-8.0.21-macos10.15-x86_64/keyring: Permission denied
+find: /System/Volumes/Data/usr/local/mysql-8.0.21-macos10.15-x86_64/data: Permission denied
+find: /System/Volumes/Data/.Spotlight-V100: No such file or directory
+find: /System/Volumes/Data/Library/Application Support/Apple/Screen Sharing/Keys: Permission denied
+find: /System/Volumes/Data/Library/Application Support/Apple/ParentalControls/Users: Permission denied
+find: /System/Volumes/Data/Library/Application Support/Apple/AssetCache/Data: Permission denied
+find: /System/Volumes/Data/Library/Application Support/Apple/Remote Desktop/Task Server: Permission denied
+find: /System/Volumes/Data/Library/Application Support/Apple/Remote Desktop/Client: Permission denied
+find: /System/Volumes/Data/Library/Application Support/ApplePushService: Permission denied
+/System/Volumes/Data/Library/Application Support/Adobe/Reader/DC/WebResources/Resource0/static/css/core
+/System/Volumes/Data/Library/Application Support/Adobe/Reader/DC/WebResources/Resource0/static/js/core
+find: /System/Volumes/Data/Library/Application Support/com.apple.TCC: Operation not permitted
+^C
+jess@zipcodes-MacBook-Pro-3 Dev % /dev/null
+zsh: permission denied: /dev/null
+jess@zipcodes-MacBook-Pro-3 Dev % corefiles.log
+zsh: command not found: corefiles.log
+jess@zipcodes-MacBook-Pro-3 Dev % > corefiles.log         
+^C
+jess@zipcodes-MacBook-Pro-3 Dev % grep -i lib corefiles.log
+jess@zipcodes-MacBook-Pro-3 Dev % find | grep
+usage: find [-H | -L | -P] [-EXdsx] [-f path] path ... [expression]
+       find [-H | -L | -P] [-EXdsx] -f path [path ...] [expression]
+usage: grep [-abcDEFGHhIiJLlmnOoqRSsUVvwxZ] [-A num] [-B num] [-C[num]]
+	[-e pattern] [-f file] [--binary-files=value] [--color=when]
+	[--context[=num]] [--directories=action] [--label] [--line-buffered]
+	[--null] [pattern] [file ...]
+jess@zipcodes-MacBook-Pro-3 Dev % python -m SimpleHTTPServer 
+Serving HTTP on 0.0.0.0 port 8000 ...
+^CTraceback (most recent call last):
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/runpy.py", line 174, in _run_module_as_main
+    "__main__", fname, loader, pkg_name)
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/runpy.py", line 72, in _run_code
+    exec code in run_globals
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/SimpleHTTPServer.py", line 235, in <module>
+    test()
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/SimpleHTTPServer.py", line 231, in test
+    BaseHTTPServer.test(HandlerClass, ServerClass)
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/BaseHTTPServer.py", line 610, in test
+    httpd.serve_forever()
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/SocketServer.py", line 231, in serve_forever
+    poll_interval)
+  File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/SocketServer.py", line 150, in _eintr_retry
+    return func(*args)
+KeyboardInterrupt
+jess@zipcodes-MacBook-Pro-3 Dev % jobs
+jess@zipcodes-MacBook-Pro-3 Dev % bg
+bg: no current job
+jess@zipcodes-MacBook-Pro-3 Dev % fg
+fg: no current job
+jess@zipcodes-MacBook-Pro-3 Dev % 
+jess@zipcodes-MacBook-Pro-3 Dev % 
